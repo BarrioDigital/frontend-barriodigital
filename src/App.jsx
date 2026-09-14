@@ -4,7 +4,7 @@ import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import { setupAxiosInterceptors } from './api/axiosClient';
 import { Login } from './pages/Login';
 
-// Pantallas temporales para validar navegación
+// Vistas temporales para probar la navegación interna
 const Catalog = () => <h2>Pantalla /catalog (Gestión de Trámites y Cupos)</h2>;
 const Requests = () => <h2>Pantalla /requests (Mis Solicitudes y Cambios de Estado)</h2>;
 
@@ -14,7 +14,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Captura y procesa el token devuelto por Microsoft al redirigir
+    // Procesa el token devuelto por Microsoft al redirigir a la app
     instance.handleRedirectPromise()
       .then((response) => {
         if (response && response.account) {
@@ -25,7 +25,7 @@ export default function App() {
         setupAxiosInterceptors(instance);
       })
       .catch((error) => {
-        console.error("Error procesando la redirección de MSAL:", error);
+        console.error("Error al procesar la redirección de MSAL:", error);
       })
       .finally(() => {
         setLoading(false);
