@@ -1,36 +1,65 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import { setupAxiosInterceptors } from './api/axiosClient';
 import { Login } from './pages/Login';
 
-// Componentes temporales para validar el enrutamiento
+// Pantallas temporales para validar navegación
 const Catalog = () => <h2>Pantalla /catalog (Gestión de Trámites y Cupos)</h2>;
 const Requests = () => <h2>Pantalla /requests (Mis Solicitudes y Cambios de Estado)</h2>;
 
 export default function App() {
   const { instance, accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Establecer la primera cuenta como activa e inicializar interceptor
-    if (accounts.length > 0) {
-      instance.setActiveAccount(accounts[0]);
-    }
-    setupAxiosInterceptors(instance);
+    // Captura y procesa el token devuelto por Microsoft al redirigir
+    instance.handleRedirectPromise()
+      .then((response) => {
+        if (response && response.account) {
+          instance.setActiveAccount(response.account);
+        } else if (accounts.length > 0 && !instance.getActiveAccount()) {
+          instance.setActiveAccount(accounts[0]);
+        }
+        setupAxiosInterceptors(instance);
+      })
+      .catch((error) => {
+        console.error("Error procesando la redirección de MSAL:", error);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [accounts, instance]);
 
+  if (loading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', fontSize: '18px' }}>
+        Iniciando sesión en BarrioDigital...
+      </div>
+    );
+  }
+
   const handleLogout = () => {
-    instance.logoutRedirect();
+    instance.logoutRedirect({ postLogoutRedirectUri: '/' });
   };
 
   return (
     <BrowserRouter>
       {isAuthenticated && (
-        <nav style={{ display: 'flex', gap: '15px', padding: '15px', backgroundColor: '#f0f0f0' }}>
-          <Link to="/catalog">Catálogo de Trámites</Link>
-          <Link to="/requests">Solicitudes</Link>
-          <button onClick={handleLogout} style={{ marginLeft: 'auto' }}>Cerrar Sesión</button>
+        <nav style={{ display: 'flex', gap: '15px', padding: '15px', backgroundColor: '#eef2f5', alignItems: 'center' }}>
+          <Link to="/catalog" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
+            Catálogo de Trámites
+          </Link>
+          <Link to="/requests" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
+            Solicitudes
+          </Link>
+          <span style={{ marginLeft: 'auto', fontWeight: 'bold', color: '#333' }}>
+            Usuario: {instance.getActiveAccount()?.name || instance.getActiveAccount()?.username}
+          </span>
+          <button onClick={handleLogout} style={{ cursor: 'pointer', padding: '5px 10px' }}>
+            Cerrar Sesión
+          </button>
         </nav>
       )}
 
@@ -38,19 +67,19 @@ export default function App() {
         <Routes>
           <Route 
             path="/login" 
-            element={!isAuthenticated ? <Login /> : <Navigate to="/catalog" />} 
+            element={!isAuthenticated ? <Login /> : <Navigate to="/catalog" replace />} 
           />
           <Route 
             path="/catalog" 
-            element={isAuthenticated ? <Catalog /> : <Navigate to="/login" />} 
+            element={isAuthenticated ? <Catalog /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/requests" 
-            element={isAuthenticated ? <Requests /> : <Navigate to="/login" />} 
+            element={isAuthenticated ? <Requests /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="*" 
-            element={<Navigate to={isAuthenticated ? "/catalog" : "/login"} />} 
+            element={<Navigate to={isAuthenticated ? "/catalog" : "/login"} replace />} 
           />
         </Routes>
       </div>
