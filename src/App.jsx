@@ -3,10 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import { setupAxiosInterceptors } from './api/axiosClient';
 import { Login } from './pages/Login';
-
-// Vistas temporales para probar la navegación interna
-const Catalog = () => <h2>Pantalla /catalog (Gestión de Trámites y Cupos)</h2>;
-const Requests = () => <h2>Pantalla /requests (Mis Solicitudes y Cambios de Estado)</h2>;
+import { Catalog } from './pages/Catalog';
+import { Requests } from './pages/Requests';
 
 export default function App() {
   const { instance, accounts } = useMsal();
@@ -14,7 +12,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Procesa el token devuelto por Microsoft al redirigir a la app
     instance.handleRedirectPromise()
       .then((response) => {
         if (response && response.account) {
