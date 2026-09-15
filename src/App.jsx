@@ -24,12 +24,8 @@ export default function App() {
         }
         setupAxiosInterceptors(instance);
       })
-      .catch((error) => {
-        console.error("Error procesando redirección de MSAL:", error);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+      .catch((error) => console.error("Error procesando redirección de MSAL:", error))
+      .finally(() => setLoading(false));
   }, [accounts, instance]);
 
   if (loading) {
@@ -53,7 +49,6 @@ export default function App() {
   const canAccessRequests = userRoles.includes('Admin') || userRoles.includes('Funcionario') || userRoles.includes('Vecino');
   const canAccessAudit = userRoles.includes('Admin') || userRoles.includes('Auditor');
 
-  // Determinar la ruta por defecto según jerarquía de roles
   const getHomeRoute = () => {
     if (!isAuthenticated) return "/login";
     if (canAccessDashboard) return "/dashboard";
