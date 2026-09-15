@@ -1,92 +1,205 @@
-import React, { useState } from 'react';
-import { axiosClient } from '../api/axiosClient';
+import React, { useState, useEffect } from 'react';
+import { useMsal } from '@azure/msal-react';
+import { requestsClient } from '../api/axiosClient';
 
-export const Requests = () => {
-  const [requestData, setRequestData] = useState({ procedureId: '', details: '' });
-  const [updateStatusData, setUpdateStatusData] = useState({ requestId: '', newStatus: 'RESUELTO' });
-  const [statusMessage, setStatusMessage] = useState('');
+export function Requests() {
+  const { instance } = useMsal();
+  const activeAccount = instance.getActiveAccount();
+  const userRoles = activeAccount?.idTokenClaims?.roles || [];
+  const canManage = userRoles.includes('Admin') || userRoles.includes('Funcionario');
 
-  // POST: Vecino crea solicitud
-  const handleCreateRequest = async (e) => {
-    e.preventDefault();
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [newRequest, setNewRequest] = useState({
+    procedureTypeId: '',
+    citizenId: '',
+    description: ''
+  });
+
+  const [updateData, setUpdateData] = useState({
+    requestId: null,
+    status: 'INGRESADO',
+    crew: ''
+  });
+
+  const fetchRequests = async () => {
     try {
-      await axiosClient.post('/requests', requestData);
-      setStatusMessage('Solicitud enviada con éxito.');
-      setRequestData({ procedureId: '', details: '' });
-    } catch (error) {
-      console.error(error);
-      setStatusMessage('Error al crear la solicitud.');
+      setLoading(true);
+      const response = await requestsClient.get('/api/requests');
+      setRequests(response.data);
+      setError(null);
+    } catch (err) {
+      console.error('Error al cargar solicitudes:', err);
+      setError('No se pudo conectar con el servicio de solicitudes.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // PUT: Funcionario cambia el estado de la solicitud
-  const handleUpdateStatus = async (e) => {
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
+  const handleCreateSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axiosClient.put(`/requests/${updateStatusData.requestId}/status`, {
-        status: updateStatusData.newStatus,
+      await requestsClient.post('/api/requests', {
+        ...newRequest,
+        procedureTypeId: parseInt(newRequest.procedureTypeId)
       });
-      setStatusMessage(`Estado actualizado a ${updateStatusData.newStatus}.`);
-      setUpdateStatusData({ requestId: '', newStatus: 'RESUELTO' });
-    } catch (error) {
-      console.error(error);
-      setStatusMessage('Error al actualizar el estado.');
+      setNewRequest({ procedureTypeId: '', citizenId: '', description: '' });
+      fetchRequests();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error al crear la solicitud');
     }
   };
+
+  const handleUpdateStatusSubmit = async (e) => {
+    e.preventDefault();
+    if (!updateData.requestId) return;
+    try {
+      await requestsClient.put(`/api/requests/${updateData.requestId}/status`, {
+        status: updateData.status,
+        crew: updateData.crew
+      });
+      setUpdateData({ requestId: null, status: 'INGRESADO', crew: '' });
+      fetchRequests();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error al actualizar estado/cuadrilla');
+    }
+  };
+
+  if (loading) return <div>Cargando solicitudes...</div>;
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-      <h2>Gestión de Solicitudes Vecinales</h2>
-      {statusMessage && <p style={{ color: 'blue', fontWeight: 'bold' }}>{statusMessage}</p>}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+      <h2>Gestión de Solicitudes</h2>
+      {error && <div style={{ color: 'red' }}>{error}</div>}
 
-      {/* Formulario Crear Solicitud (Vecino) */}
-      <section style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '5px', marginBottom: '20px' }}>
-        <h3>Crear Solicitud de Trámite (Vecino)</h3>
-        <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <input 
-            type="text" 
-            placeholder="ID del Trámite a Solicitar" 
-            value={requestData.procedureId} 
-            onChange={(e) => setRequestData({ ...requestData, procedureId: e.target.value })} 
-            required 
+      {/* Formulario de creación disponible para todos los roles autorizados */}
+      <div style={{ padding: '15px', border: '1px solid #ccc', borderRadius: '6px', backgroundColor: '#f8f9fa' }}>
+        <h3>Ingresar Nueva Solicitud</h3>
+        <form onSubmit={handleCreateSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <input
+            type="number"
+            placeholder="ID Tipo de Trámite"
+            value={newRequest.procedureTypeId}
+            onChange={(e) => setNewRequest({ ...newRequest, procedureTypeId: e.target.value })}
+            required
           />
-          <textarea 
-            placeholder="Detalles / Motivo de la solicitud" 
-            value={requestData.details} 
-            onChange={(e) => setRequestData({ ...requestData, details: e.target.value })} 
-            required 
+          <input
+            type="text"
+            placeholder="RUT / ID Ciudadano"
+            value={newRequest.citizenId}
+            onChange={(e) => setNewRequest({ ...newRequest, citizenId: e.target.value })}
+            required
           />
-          <button type="submit" style={{ backgroundColor: '#0078d4', color: 'white', border: 'none', padding: '10px' }}>
+          <input
+            type="text"
+            placeholder="Descripción del requerimiento"
+            value={newRequest.description}
+            onChange={(e) => setNewRequest({ ...newRequest, description: e.target.value })}
+            style={{ gridColumn: 'span 2' }}
+          />
+          <button type="submit" style={{ gridColumn: 'span 2', padding: '8px', cursor: 'pointer' }}>
             Enviar Solicitud
           </button>
         </form>
-      </section>
+      </div>
 
-      {/* Tabla Operativa / Cambio de Estado (Funcionario) */}
-      <section style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '5px' }}>
-        <h3>Gestión de Estado (Funcionario)</h3>
-        <form onSubmit={handleUpdateStatus} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <input 
-            type="text" 
-            placeholder="ID de Solicitud" 
-            value={updateStatusData.requestId} 
-            onChange={(e) => setUpdateStatusData({ ...updateStatusData, requestId: e.target.value })} 
-            required 
-          />
-          <select 
-            value={updateStatusData.newStatus} 
-            onChange={(e) => setUpdateStatusData({ ...updateStatusData, newStatus: e.target.value })}
-          >
-            <option value="INGRESADO">INGRESADO</option>
-            <option value="EN_PROCESO">EN_PROCESO</option>
-            <option value="RESUELTO">RESUELTO</option>
-            <option value="RECHAZADO">RECHAZADO</option>
-          </select>
-          <button type="submit" style={{ backgroundColor: '#ffc107', color: 'black', border: 'none', padding: '10px' }}>
-            Actualizar Estado
-          </button>
-        </form>
-      </section>
+      {/* Tabla con registros de la base de datos */}
+      <table border="1" cellPadding="8" style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead>
+          <tr style={{ backgroundColor: '#eaeaea' }}>
+            <th>ID</th>
+            <th>RUT Ciudadano</th>
+            <th>ID Trámite</th>
+            <th>Descripción</th>
+            <th>Estado</th>
+            <th>Cuadrilla Asignada</th>
+            <th>Fecha Creación</th>
+            {canManage && <th>Acción</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {requests.map((req) => (
+            <tr key={req.id}>
+              <td>{req.id}</td>
+              <td>{req.citizenId}</td>
+              <td>{req.procedureTypeId}</td>
+              <td>{req.description || 'N/A'}</td>
+              <td>
+                <strong>{req.status}</strong>
+              </td>
+              <td>
+                {req.assignedCrew || (
+                  <span style={{ color: '#888', fontStyle: 'italic' }}>Sin asignar</span>
+                )}
+              </td>
+              <td>{req.createdAt ? new Date(req.createdAt).toLocaleString() : 'N/A'}</td>
+              {canManage && (
+                <td>
+                  <button
+                    onClick={() =>
+                      setUpdateData({
+                        requestId: req.id,
+                        status: req.status,
+                        crew: req.assignedCrew || ''
+                      })
+                    }
+                  >
+                    Gestionar
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Panel para modificar estados y cuadrillas exclusivo Funcionarios/Admins */}
+      {canManage && updateData.requestId && (
+        <div style={{ padding: '15px', border: '1px solid #28a745', borderRadius: '6px', backgroundColor: '#f0fff4' }}>
+          <h3>Gestionar Solicitud #{updateData.requestId}</h3>
+          <form onSubmit={handleUpdateStatusSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <label>
+              <strong>Estado:</strong>
+              <select
+                value={updateData.status}
+                onChange={(e) => setUpdateData({ ...updateData, status: e.target.value })}
+                style={{ marginLeft: '10px', padding: '4px' }}
+              >
+                <option value="INGRESADO">INGRESADO</option>
+                <option value="ADMITIDO">ADMITIDO</option>
+                <option value="EN_GESTION">EN_GESTION</option>
+                <option value="EN_TERRENO">EN_TERRENO</option>
+                <option value="RESUELTO">RESUELTO</option>
+                <option value="RECHAZADO">RECHAZADO</option>
+              </select>
+            </label>
+
+            <label>
+              <strong>Cuadrilla:</strong>
+              <input
+                type="text"
+                placeholder="Nombre de la cuadrilla"
+                value={updateData.crew}
+                onChange={(e) => setUpdateData({ ...updateData, crew: e.target.value })}
+                style={{ marginLeft: '10px', padding: '4px' }}
+              />
+            </label>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button type="submit">Actualizar</button>
+              <button type="button" onClick={() => setUpdateData({ requestId: null, status: 'INGRESADO', crew: '' })}>
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
-};
+}

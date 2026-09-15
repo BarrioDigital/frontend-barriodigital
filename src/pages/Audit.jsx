@@ -7,18 +7,21 @@ export const Audit = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const normalizarData = (data) => {
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.content)) return data.content; // Para respuestas paginadas de Spring
+    return [];
+  };
+
   const cargarTodos = async () => {
     try {
       setLoading(true);
       setError('');
-
       const response = await axiosClient.get('/api/audit');
-      setEvents(response.data);
-
-    } catch (error) {
-      console.error(error);
-      setError('No se pudo cargar la auditoría.');
-
+      setEvents(normalizarData(response.data));
+    } catch (err) {
+      console.error("Error cargando auditoría:", err);
+      setError('No se pudo cargar la auditoría. Revisa la consola del navegador.');
     } finally {
       setLoading(false);
     }
@@ -33,17 +36,11 @@ export const Audit = () => {
     try {
       setLoading(true);
       setError('');
-
-      const response = await axiosClient.get(
-        `/api/audit/request/${requestId}`
-      );
-
-      setEvents(response.data);
-
-    } catch (error) {
-      console.error(error);
+      const response = await axiosClient.get(`/api/audit/request/${requestId}`);
+      setEvents(normalizarData(response.data));
+    } catch (err) {
+      console.error("Error buscando solicitud:", err);
       setError('No se pudo consultar la solicitud.');
-
     } finally {
       setLoading(false);
     }
@@ -55,140 +52,61 @@ export const Audit = () => {
 
   return (
     <div>
+      <h2 style={{ textAlign: 'center' }}>Auditoría</h2>
+      <p style={{ textAlign: 'center' }}>Historial cronológico de cambios de las solicitudes</p>
 
-      <h2 style={{ textAlign: 'center' }}>
-        Auditoría
-      </h2>
-
-      <p style={{ textAlign: 'center' }}>
-        Historial cronológico de cambios de las solicitudes
-      </p>
-
-      <div
-        style={{
-          display: 'flex',
-          gap: '10px',
-          justifyContent: 'center',
-          marginTop: '25px',
-          marginBottom: '30px'
-        }}
-      >
-
+      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '25px', marginBottom: '30px' }}>
         <input
           type="number"
           placeholder="ID de solicitud"
           value={requestId}
           onChange={(e) => setRequestId(e.target.value)}
-          style={{
-            padding: '10px',
-            width: '200px',
-            border: '1px solid #ccc',
-            borderRadius: '6px'
-          }}
+          style={{ padding: '10px', width: '200px', border: '1px solid #ccc', borderRadius: '6px' }}
         />
-
-        <button
-          onClick={buscarPorSolicitud}
-          style={{
-            padding: '10px 18px',
-            cursor: 'pointer'
-          }}
-        >
+        <button onClick={buscarPorSolicitud} style={{ padding: '10px 18px', cursor: 'pointer' }}>
           Buscar
         </button>
-
         <button
           onClick={() => {
             setRequestId('');
             cargarTodos();
           }}
-          style={{
-            padding: '10px 18px',
-            cursor: 'pointer'
-          }}
+          style={{ padding: '10px 18px', cursor: 'pointer' }}
         >
           Ver todos
         </button>
-
       </div>
 
-      {loading && (
-        <p style={{ textAlign: 'center' }}>
-          Cargando auditoría...
-        </p>
-      )}
-
-      {error && (
-        <p style={{ textAlign: 'center' }}>
-          {error}
-        </p>
-      )}
-
+      {loading && <p style={{ textAlign: 'center' }}>Cargando auditoría...</p>}
+      {error && <p style={{ textAlign: 'center', color: '#ff4d4f' }}>{error}</p>}
       {!loading && !error && events.length === 0 && (
-        <p style={{ textAlign: 'center' }}>
-          No existen eventos de auditoría.
-        </p>
+        <p style={{ textAlign: 'center' }}>No existen eventos de auditoría.</p>
       )}
 
       {!loading && !error && events.length > 0 && (
-
-        <div
-          style={{
-            maxWidth: '800px',
-            margin: '0 auto'
-          }}
-        >
-
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           {events.map((event) => (
-
             <div
-              key={event.id}
+              key={event.id || Math.random()}
               style={{
                 borderLeft: '4px solid #0078d4',
                 padding: '15px 20px',
                 marginBottom: '20px',
                 backgroundColor: '#f7f9fb',
-                borderRadius: '6px'
+                color: '#333',
+                borderRadius: '6px',
               }}
             >
-
-              <h3>
-                Solicitud #{event.requestId}
-              </h3>
-
+              <h3>Solicitud #{event.requestId}</h3>
               <p>
-                Estado:
-                {' '}
-                {event.oldStatus || 'Sin estado'}
-                {' → '}
-                <strong>
-                  {event.newStatus || 'Sin estado'}
-                </strong>
+                Estado: {event.oldStatus || 'Sin estado'} → <strong>{event.newStatus || 'Sin estado'}</strong>
               </p>
-
-              <p>
-                Evento:
-                {' '}
-                {event.eventType || 'Sin información'}
-              </p>
-
-              <p>
-                Fecha:
-                {' '}
-                {event.eventTimestamp
-                  ? new Date(event.eventTimestamp)
-                      .toLocaleString('es-CL')
-                  : 'Sin fecha'}
-              </p>
-
+              <p>Evento: {event.eventType || 'Sin información'}</p>
+              <p>Fecha: {event.eventTimestamp ? new Date(event.eventTimestamp).toLocaleString('es-CL') : 'Sin fecha'}</p>
             </div>
-
           ))}
-
         </div>
-
       )}
-
     </div>
   );
 };

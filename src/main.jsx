@@ -8,10 +8,13 @@ import './index.css';
 
 const msalInstance = new PublicClientApplication(msalConfig);
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <MsalProvider instance={msalInstance}>
-      <App />
-    </MsalProvider>
-  </React.StrictMode>
-);
+// Inicialización asíncrona requerida por MSAL v3
+msalInstance.initialize().then(() => {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <MsalProvider instance={msalInstance}>
+        <App />
+      </MsalProvider>
+    </React.StrictMode>
+  );
+});
