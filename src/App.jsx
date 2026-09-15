@@ -23,7 +23,7 @@ export default function App() {
         setupAxiosInterceptors(instance);
       })
       .catch((error) => {
-        console.error("Error al procesar la redirección de MSAL:", error);
+        console.error("Error procesando redirección de MSAL:", error);
       })
       .finally(() => {
         setLoading(false);
@@ -32,7 +32,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', fontSize: '18px', color: '#fff' }}>
+      <div style={{ padding: '40px', textAlign: 'center', fontSize: '18px' }}>
         Iniciando sesión en BarrioDigital...
       </div>
     );
@@ -45,7 +45,6 @@ export default function App() {
   const activeAccount = instance.getActiveAccount();
   const userRoles = activeAccount?.idTokenClaims?.roles || [];
 
-  // Permisos estrictos por rol
   const canAccessCatalog = userRoles.includes('Admin') || userRoles.includes('Funcionario');
   const canAccessRequests = userRoles.includes('Admin') || userRoles.includes('Funcionario') || userRoles.includes('Vecino');
 
@@ -81,7 +80,6 @@ export default function App() {
             element={!isAuthenticated ? <Login /> : <Navigate to={canAccessCatalog ? "/catalog" : canAccessRequests ? "/requests" : "/login"} replace />}
           />
 
-          {/* Catalog: Exclusivo Admin y Funcionario */}
           <Route
             path="/catalog"
             element={
@@ -95,7 +93,6 @@ export default function App() {
             }
           />
 
-          {/* Requests: Exclusivo Admin, Funcionario y Vecino */}
           <Route
             path="/requests"
             element={
@@ -109,7 +106,6 @@ export default function App() {
             }
           />
 
-          {/* Redirección por defecto */}
           <Route
             path="*"
             element={
