@@ -5,6 +5,7 @@ import { setupAxiosInterceptors } from './api/axiosClient';
 import { Login } from './pages/Login';
 import { Catalog } from './pages/Catalog';
 import { Requests } from './pages/Requests';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 export default function App() {
   const { instance, accounts } = useMsal();
@@ -31,7 +32,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', fontSize: '18px' }}>
+      <div style={{ padding: '40px', textAlign: 'center', fontSize: '18px', color: '#fff' }}>
         Iniciando sesión en BarrioDigital...
       </div>
     );
@@ -41,20 +42,33 @@ export default function App() {
     instance.logoutRedirect({ postLogoutRedirectUri: '/' });
   };
 
+  const activeAccount = instance.getActiveAccount();
+  const userRoles = activeAccount?.idTokenClaims?.roles || [];
+
+  // Permisos estrictos por rol
+  const canAccessCatalog = userRoles.includes('Admin') || userRoles.includes('Funcionario');
+  const canAccessRequests = userRoles.includes('Admin') || userRoles.includes('Funcionario') || userRoles.includes('Vecino');
+
   return (
     <BrowserRouter>
       {isAuthenticated && (
         <nav style={{ display: 'flex', gap: '15px', padding: '15px', backgroundColor: '#eef2f5', alignItems: 'center' }}>
-          <Link to="/catalog" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
-            Catálogo de Trámites
-          </Link>
-          <Link to="/requests" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
-            Solicitudes
-          </Link>
+          {canAccessCatalog && (
+            <Link to="/catalog" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
+              Catálogo de Trámites
+            </Link>
+          )}
+
+          {canAccessRequests && (
+            <Link to="/requests" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
+              Solicitudes
+            </Link>
+          )}
+
           <span style={{ marginLeft: 'auto', fontWeight: 'bold', color: '#333' }}>
-            Usuario: {instance.getActiveAccount()?.name || instance.getActiveAccount()?.username}
+            Usuario: {activeAccount?.name || activeAccount?.username}
           </span>
-          <button onClick={handleLogout} style={{ cursor: 'pointer', padding: '5px 10px' }}>
+          <button onClick={handleLogout} style={{ cursor: 'pointer', padding: '5px 10px', borderRadius: '4px', border: '1px solid #ccc' }}>
             Cerrar Sesión
           </button>
         </nav>
@@ -62,21 +76,56 @@ export default function App() {
 
       <div style={{ padding: '20px' }}>
         <Routes>
-          <Route 
-            path="/login" 
-            element={!isAuthenticated ? <Login /> : <Navigate to="/catalog" replace />} 
+          <Route
+            path="/login"
+            element={!isAuthenticated ? <Login /> : <Navigate to={canAccessCatalog ? "/catalog" : canAccessRequests ? "/requests" : "/login"} replace />}
           />
-          <Route 
-            path="/catalog" 
-            element={isAuthenticated ? <Catalog /> : <Navigate to="/login" replace />} 
+
+          {/* Catalog: Exclusivo Admin y Funcionario */}
+          <Route
+            path="/catalog"
+            element={
+              isAuthenticated ? (
+                <ProtectedRoute allowedRoles={['Admin', 'Funcionario']}>
+                  <Catalog />
+                </ProtectedRoute>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
           />
-          <Route 
-            path="/requests" 
-            element={isAuthenticated ? <Requests /> : <Navigate to="/login" replace />} 
+
+          {/* Requests: Exclusivo Admin, Funcionario y Vecino */}
+          <Route
+            path="/requests"
+            element={
+              isAuthenticated ? (
+                <ProtectedRoute allowedRoles={['Admin', 'Funcionario', 'Vecino']}>
+                  <Requests />
+                </ProtectedRoute>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
           />
-          <Route 
-            path="*" 
-            element={<Navigate to={isAuthenticated ? "/catalog" : "/login"} replace />} 
+
+          {/* Redirección por defecto */}
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to={
+                  !isAuthenticated
+                    ? "/login"
+                    : canAccessCatalog
+                    ? "/catalog"
+                    : canAccessRequests
+                    ? "/requests"
+                    : "/login"
+                }
+                replace
+              />
+            }
           />
         </Routes>
       </div>
