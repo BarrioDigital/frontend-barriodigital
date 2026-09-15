@@ -5,6 +5,8 @@ import { setupAxiosInterceptors } from './api/axiosClient';
 import { Login } from './pages/Login';
 import { Catalog } from './pages/Catalog';
 import { Requests } from './pages/Requests';
+import { Audit } from './pages/Audit';
+import { Dashboard } from './pages/Dashboard';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 export default function App() {
@@ -45,13 +47,30 @@ export default function App() {
   const activeAccount = instance.getActiveAccount();
   const userRoles = activeAccount?.idTokenClaims?.roles || [];
 
+  // Permisos por módulo
+  const canAccessDashboard = true; // Todos los autenticados
   const canAccessCatalog = userRoles.includes('Admin') || userRoles.includes('Funcionario');
   const canAccessRequests = userRoles.includes('Admin') || userRoles.includes('Funcionario') || userRoles.includes('Vecino');
+  const canAccessAudit = userRoles.includes('Admin') || userRoles.includes('Auditor');
+
+  // Determinar la ruta por defecto según jerarquía de roles
+  const getHomeRoute = () => {
+    if (!isAuthenticated) return "/login";
+    if (canAccessDashboard) return "/dashboard";
+    if (canAccessCatalog) return "/catalog";
+    if (canAccessRequests) return "/requests";
+    if (canAccessAudit) return "/audit";
+    return "/login";
+  };
 
   return (
     <BrowserRouter>
       {isAuthenticated && (
         <nav style={{ display: 'flex', gap: '15px', padding: '15px', backgroundColor: '#eef2f5', alignItems: 'center' }}>
+          <Link to="/dashboard" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
+            Inicio
+          </Link>
+
           {canAccessCatalog && (
             <Link to="/catalog" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
               Catálogo de Trámites
@@ -61,6 +80,12 @@ export default function App() {
           {canAccessRequests && (
             <Link to="/requests" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
               Solicitudes
+            </Link>
+          )}
+
+          {canAccessAudit && (
+            <Link to="/audit" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
+              Auditoría
             </Link>
           )}
 
@@ -77,7 +102,20 @@ export default function App() {
         <Routes>
           <Route
             path="/login"
-            element={!isAuthenticated ? <Login /> : <Navigate to={canAccessCatalog ? "/catalog" : canAccessRequests ? "/requests" : "/login"} replace />}
+            element={!isAuthenticated ? <Login /> : <Navigate to={getHomeRoute()} replace />}
+          />
+
+          <Route
+            path="/dashboard"
+            element={
+              isAuthenticated ? (
+                <ProtectedRoute allowedRoles={['Admin', 'Funcionario', 'Auditor', 'Vecino']}>
+                  <Dashboard />
+                </ProtectedRoute>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
           />
 
           <Route
@@ -107,21 +145,21 @@ export default function App() {
           />
 
           <Route
-            path="*"
+            path="/audit"
             element={
-              <Navigate
-                to={
-                  !isAuthenticated
-                    ? "/login"
-                    : canAccessCatalog
-                    ? "/catalog"
-                    : canAccessRequests
-                    ? "/requests"
-                    : "/login"
-                }
-                replace
-              />
+              isAuthenticated ? (
+                <ProtectedRoute allowedRoles={['Admin', 'Auditor']}>
+                  <Audit />
+                </ProtectedRoute>
+              ) : (
+                <Navigate to="/login" replace />
+              )
             }
+          />
+
+          <Route
+            path="*"
+            element={<Navigate to={getHomeRoute()} replace />}
           />
         </Routes>
       </div>
