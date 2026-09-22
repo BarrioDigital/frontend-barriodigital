@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
-import { requestsClient } from '../api/axiosClient';
+import { requestsClient, catalogClient } from '../api/axiosClient';
 
 export function Requests() {
   const { instance } = useMsal();
@@ -9,6 +9,7 @@ export function Requests() {
   const canManage = userRoles.includes('Admin') || userRoles.includes('Funcionario');
 
   const [requests, setRequests] = useState([]);
+  const [procedures, setProcedures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -24,22 +25,29 @@ export function Requests() {
     crew: ''
   });
 
-  const fetchRequests = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const response = await requestsClient.get('/api/requests');
-      setRequests(response.data);
       setError(null);
+
+      // Carga simultánea de solicitudes y trámites del catálogo
+      const [requestsRes, catalogRes] = await Promise.all([
+        requestsClient.get('/api/requests'),
+        catalogClient.get('/api/catalog/procedures')
+      ]);
+
+      setRequests(requestsRes.data);
+      setProcedures(catalogRes.data);
     } catch (err) {
-      console.error('Error al cargar solicitudes:', err);
-      setError('No se pudo conectar con el servicio de solicitudes.');
+      console.error('Error al cargar datos:', err);
+      setError('No se pudo conectar con los servicios correspondientes.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchRequests();
+    loadData();
   }, []);
 
   const handleCreateSubmit = async (e) => {
@@ -50,7 +58,7 @@ export function Requests() {
         procedureTypeId: parseInt(newRequest.procedureTypeId)
       });
       setNewRequest({ procedureTypeId: '', citizenId: '', description: '' });
-      fetchRequests();
+      loadData();
     } catch (err) {
       alert(err.response?.data?.message || 'Error al crear la solicitud');
     }
@@ -65,141 +73,209 @@ export function Requests() {
         crew: updateData.crew
       });
       setUpdateData({ requestId: null, status: 'INGRESADO', crew: '' });
-      fetchRequests();
+      loadData();
     } catch (err) {
       alert(err.response?.data?.message || 'Error al actualizar estado/cuadrilla');
     }
   };
 
-  if (loading) return <div>Cargando solicitudes...</div>;
+  const getStatusBadge = (status) => {
+    const statusMap = {
+      INGRESADO: 'bg-primary',
+      ADMITIDO: 'bg-info text-dark',
+      EN_GESTION: 'bg-warning text-dark',
+      EN_TERRENO: 'bg-secondary',
+      RESUELTO: 'bg-success',
+      RECHAZADO: 'bg-danger'
+    };
+    return <span className={`badge ${statusMap[status] || 'bg-dark'}`}>{status}</span>;
+  };
+
+  if (loading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center my-5">
+        <div className="spinner-border text-primary me-2" role="status"></div>
+        <span>Cargando datos de solicitudes...</span>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
-      <h2>Gestión de Solicitudes</h2>
-      {error && <div style={{ color: 'red' }}>{error}</div>}
+    <div className="container py-4">
+      <h2 className="fw-bold text-primary mb-4">Gestión de Solicitudes</h2>
 
-      {/* Formulario de creación disponible para todos los roles autorizados */}
-      <div style={{ padding: '15px', border: '1px solid #ccc', borderRadius: '6px', backgroundColor: '#f8f9fa' }}>
-        <h3>Ingresar Nueva Solicitud</h3>
-        <form onSubmit={handleCreateSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          <input
-            type="number"
-            placeholder="ID Tipo de Trámite"
-            value={newRequest.procedureTypeId}
-            onChange={(e) => setNewRequest({ ...newRequest, procedureTypeId: e.target.value })}
-            required
-          />
-          <input
-            type="text"
-            placeholder="RUT / ID Ciudadano"
-            value={newRequest.citizenId}
-            onChange={(e) => setNewRequest({ ...newRequest, citizenId: e.target.value })}
-            required
-          />
-          <input
-            type="text"
-            placeholder="Descripción del requerimiento"
-            value={newRequest.description}
-            onChange={(e) => setNewRequest({ ...newRequest, description: e.target.value })}
-            style={{ gridColumn: 'span 2' }}
-          />
-          <button type="submit" style={{ gridColumn: 'span 2', padding: '8px', cursor: 'pointer' }}>
-            Enviar Solicitud
-          </button>
-        </form>
-      </div>
+      {error && <div className="alert alert-danger shadow-sm">{error}</div>}
 
-      {/* Tabla con registros de la base de datos */}
-      <table border="1" cellPadding="8" style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead>
-          <tr style={{ backgroundColor: '#eaeaea' }}>
-            <th>ID</th>
-            <th>RUT Ciudadano</th>
-            <th>ID Trámite</th>
-            <th>Descripción</th>
-            <th>Estado</th>
-            <th>Cuadrilla Asignada</th>
-            <th>Fecha Creación</th>
-            {canManage && <th>Acción</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {requests.map((req) => (
-            <tr key={req.id}>
-              <td>{req.id}</td>
-              <td>{req.citizenId}</td>
-              <td>{req.procedureTypeId}</td>
-              <td>{req.description || 'N/A'}</td>
-              <td>
-                <strong>{req.status}</strong>
-              </td>
-              <td>
-                {req.assignedCrew || (
-                  <span style={{ color: '#888', fontStyle: 'italic' }}>Sin asignar</span>
-                )}
-              </td>
-              <td>{req.createdAt ? new Date(req.createdAt).toLocaleString() : 'N/A'}</td>
-              {canManage && (
-                <td>
-                  <button
-                    onClick={() =>
-                      setUpdateData({
-                        requestId: req.id,
-                        status: req.status,
-                        crew: req.assignedCrew || ''
-                      })
-                    }
-                  >
-                    Gestionar
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* Panel para modificar estados y cuadrillas exclusivo Funcionarios/Admins */}
-      {canManage && updateData.requestId && (
-        <div style={{ padding: '15px', border: '1px solid #28a745', borderRadius: '6px', backgroundColor: '#f0fff4' }}>
-          <h3>Gestionar Solicitud #{updateData.requestId}</h3>
-          <form onSubmit={handleUpdateStatusSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <label>
-              <strong>Estado:</strong>
+      {/* Formulario de Ingreso de Nueva Solicitud */}
+      <div className="card shadow-sm border-0 mb-4">
+        <div className="card-header bg-primary text-white fw-semibold">
+          Ingresar Nueva Solicitud
+        </div>
+        <div className="card-body">
+          <form onSubmit={handleCreateSubmit} className="row g-3">
+            <div className="col-md-6">
+              <label className="form-label fw-bold">Tipo de Trámite</label>
               <select
-                value={updateData.status}
-                onChange={(e) => setUpdateData({ ...updateData, status: e.target.value })}
-                style={{ marginLeft: '10px', padding: '4px' }}
+                className="form-select"
+                value={newRequest.procedureTypeId}
+                onChange={(e) => setNewRequest({ ...newRequest, procedureTypeId: e.target.value })}
+                required
               >
-                <option value="INGRESADO">INGRESADO</option>
-                <option value="ADMITIDO">ADMITIDO</option>
-                <option value="EN_GESTION">EN_GESTION</option>
-                <option value="EN_TERRENO">EN_TERRENO</option>
-                <option value="RESUELTO">RESUELTO</option>
-                <option value="RECHAZADO">RECHAZADO</option>
+                <option value="">-- Seleccionar Trámite Disponible --</option>
+                {procedures.map((proc) => (
+                  <option key={proc.id} value={proc.id}>
+                    [{proc.code}] {proc.name} (Cupos disponibles: {proc.availableQuota})
+                  </option>
+                ))}
               </select>
-            </label>
+            </div>
 
-            <label>
-              <strong>Cuadrilla:</strong>
+            <div className="col-md-6">
+              <label className="form-label fw-bold">RUT / ID Ciudadano</label>
               <input
                 type="text"
-                placeholder="Nombre de la cuadrilla"
-                value={updateData.crew}
-                onChange={(e) => setUpdateData({ ...updateData, crew: e.target.value })}
-                style={{ marginLeft: '10px', padding: '4px' }}
+                className="form-control"
+                placeholder="Ej: 12345678-9"
+                value={newRequest.citizenId}
+                onChange={(e) => setNewRequest({ ...newRequest, citizenId: e.target.value })}
+                required
               />
-            </label>
+            </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit">Actualizar</button>
-              <button type="button" onClick={() => setUpdateData({ requestId: null, status: 'INGRESADO', crew: '' })}>
-                Cancelar
+            <div className="col-12">
+              <label className="form-label fw-bold">Descripción del Requerimiento</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Detalle de la solicitud ingresada..."
+                value={newRequest.description}
+                onChange={(e) => setNewRequest({ ...newRequest, description: e.target.value })}
+              />
+            </div>
+
+            <div className="col-12 text-end mt-3">
+              <button type="submit" className="btn btn-success px-4">
+                Enviar Solicitud
               </button>
             </div>
           </form>
         </div>
+      </div>
+
+      {/* Panel de Gestión para Funcionarios / Admins */}
+      {canManage && updateData.requestId && (
+        <div className="card shadow-sm border-success mb-4 bg-light">
+          <div className="card-body">
+            <h5 className="card-title text-success fw-bold">Gestionar Solicitud #{updateData.requestId}</h5>
+            <form onSubmit={handleUpdateStatusSubmit} className="row g-3 mt-1 align-items-end">
+              <div className="col-md-5">
+                <label className="form-label fw-bold">Estado</label>
+                <select
+                  className="form-select"
+                  value={updateData.status}
+                  onChange={(e) => setUpdateData({ ...updateData, status: e.target.value })}
+                >
+                  <option value="INGRESADO">INGRESADO</option>
+                  <option value="ADMITIDO">ADMITIDO</option>
+                  <option value="EN_GESTION">EN_GESTION</option>
+                  <option value="EN_TERRENO">EN_TERRENO</option>
+                  <option value="RESUELTO">RESUELTO</option>
+                  <option value="RECHAZADO">RECHAZADO</option>
+                </select>
+              </div>
+
+              <div className="col-md-5">
+                <label className="form-label fw-bold">Cuadrilla Asignada</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Nombre o ID de la cuadrilla"
+                  value={updateData.crew}
+                  onChange={(e) => setUpdateData({ ...updateData, crew: e.target.value })}
+                />
+              </div>
+
+              <div className="col-md-2 d-flex gap-2">
+                <button type="submit" className="btn btn-success w-100">Actualizar</button>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() => setUpdateData({ requestId: null, status: 'INGRESADO', crew: '' })}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
+
+      {/* Tabla con el historial de solicitudes */}
+      <div className="card shadow-sm border-0">
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            <table className="table table-hover table-striped align-middle mb-0">
+              <thead className="table-dark">
+                <tr>
+                  <th>ID</th>
+                  <th>RUT Ciudadano</th>
+                  <th>ID Trámite</th>
+                  <th>Descripción</th>
+                  <th>Estado</th>
+                  <th>Cuadrilla Asignada</th>
+                  <th>Fecha Creación</th>
+                  {canManage && <th className="text-center">Acción</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {requests.length === 0 ? (
+                  <tr>
+                    <td colSpan={canManage ? "8" : "7"} className="text-center py-4 text-muted">
+                      No existen solicitudes registradas.
+                    </td>
+                  </tr>
+                ) : (
+                  requests.map((req) => (
+                    <tr key={req.id}>
+                      <td className="fw-bold">{req.id}</td>
+                      <td>{req.citizenId}</td>
+                      <td><span className="badge bg-light text-dark border">{req.procedureTypeId}</span></td>
+                      <td>{req.description || 'N/A'}</td>
+                      <td>{getStatusBadge(req.status)}</td>
+                      <td>
+                        {req.assignedCrew ? (
+                          <span className="fw-semibold">{req.assignedCrew}</span>
+                        ) : (
+                          <span className="text-muted small"><em>Sin asignar</em></span>
+                        )}
+                      </td>
+                      <td className="small">
+                        {req.createdAt ? new Date(req.createdAt).toLocaleString('es-CL') : 'N/A'}
+                      </td>
+                      {canManage && (
+                        <td className="text-center">
+                          <button
+                            className="btn btn-sm btn-outline-success"
+                            onClick={() =>
+                              setUpdateData({
+                                requestId: req.id,
+                                status: req.status,
+                                crew: req.assignedCrew || ''
+                              })
+                            }
+                          >
+                            Gestionar
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

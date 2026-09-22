@@ -4,6 +4,11 @@ import { PublicClientApplication } from '@azure/msal-browser';
 import { MsalProvider } from '@azure/msal-react';
 import { msalConfig } from './authConfig';
 import App from './App.jsx';
+
+// Importación de Bootstrap y sus íconos
+import 'bootstrap/dist/css/bootstrap.min.css';
+import 'bootstrap-icons/font/bootstrap-icons.css';
+
 import './index.css';
 
 const msalInstance = new PublicClientApplication(msalConfig);
