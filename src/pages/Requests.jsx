@@ -13,6 +13,12 @@ export function Requests() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [showDetail, setShowDetail] = useState(false);
+
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   const [newRequest, setNewRequest] = useState({
     procedureTypeId: '',
     citizenId: '',
@@ -30,7 +36,6 @@ export function Requests() {
       setLoading(true);
       setError(null);
 
-      // Carga simultánea de solicitudes y trámites del catálogo
       const [requestsRes, catalogRes] = await Promise.all([
         requestsClient.get('/api/requests'),
         catalogClient.get('/api/catalog/procedures')
@@ -50,6 +55,10 @@ export function Requests() {
     loadData();
   }, []);
 
+  const selectedProcedure = procedures.find(
+    (p) => p.id.toString() === newRequest.procedureTypeId.toString()
+  );
+
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -58,6 +67,8 @@ export function Requests() {
         procedureTypeId: parseInt(newRequest.procedureTypeId)
       });
       setNewRequest({ procedureTypeId: '', citizenId: '', description: '' });
+      setShowDetail(false);
+      setCurrentPage(1); // Regresa a la primera página para ver el elemento recién creado
       loadData();
     } catch (err) {
       alert(err.response?.data?.message || 'Error al crear la solicitud');
@@ -100,13 +111,20 @@ export function Requests() {
     );
   }
 
+  // --- ORDEN DESCENDENTE Y PAGINACIÓN ---
+  const sortedRequests = [...requests].reverse();
+  const totalPages = Math.ceil(sortedRequests.length / itemsPerPage) || 1;
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentRequests = sortedRequests.slice(indexOfFirstItem, indexOfLastItem);
+
   return (
     <div className="container py-4">
       <h2 className="fw-bold text-primary mb-4">Gestión de Solicitudes</h2>
 
       {error && <div className="alert alert-danger shadow-sm">{error}</div>}
 
-      {/* Formulario de Ingreso de Nueva Solicitud */}
+      {/* Formulario de Ingreso */}
       <div className="card shadow-sm border-0 mb-4">
         <div className="card-header bg-primary text-white fw-semibold">
           Ingresar Nueva Solicitud
@@ -115,19 +133,36 @@ export function Requests() {
           <form onSubmit={handleCreateSubmit} className="row g-3">
             <div className="col-md-6">
               <label className="form-label fw-bold">Tipo de Trámite</label>
-              <select
-                className="form-select"
-                value={newRequest.procedureTypeId}
-                onChange={(e) => setNewRequest({ ...newRequest, procedureTypeId: e.target.value })}
-                required
-              >
-                <option value="">-- Seleccionar Trámite Disponible --</option>
-                {procedures.map((proc) => (
-                  <option key={proc.id} value={proc.id}>
-                    [{proc.code}] {proc.name} (Cupos disponibles: {proc.availableQuota})
-                  </option>
-                ))}
-              </select>
+              <div className="input-group">
+                <select
+                  className="form-select"
+                  value={newRequest.procedureTypeId}
+                  onChange={(e) => {
+                    setNewRequest({ ...newRequest, procedureTypeId: e.target.value });
+                    setShowDetail(false);
+                  }}
+                  required
+                >
+                  <option value="">-- Seleccionar Trámite Disponible --</option>
+                  {procedures.map((proc) => (
+                    <option key={proc.id} value={proc.id}>
+                      [{proc.code}] {proc.name}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedProcedure && (
+                  <button
+                    type="button"
+                    className={`btn ${showDetail ? 'btn-info text-white' : 'btn-outline-info'}`}
+                    onClick={() => setShowDetail(!showDetail)}
+                    title="Ver detalle del trámite"
+                  >
+                    <i className="bi bi-question-circle-fill me-1"></i>
+                    {showDetail ? 'Ocultar' : 'Ver detalle'}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="col-md-6">
@@ -141,6 +176,28 @@ export function Requests() {
                 required
               />
             </div>
+
+            {showDetail && selectedProcedure && (
+              <div className="col-12">
+                <div className="alert alert-info border-info mb-0 d-flex justify-content-between align-items-center shadow-sm">
+                  <div>
+                    <h6 className="fw-bold mb-1">
+                      <i className="bi bi-info-circle me-2"></i>
+                      {selectedProcedure.name} ({selectedProcedure.code})
+                    </h6>
+                    <p className="mb-0 text-dark small">
+                      <strong>Descripción:</strong> {selectedProcedure.description || 'Sin descripción registrada.'}
+                    </p>
+                  </div>
+                  <div className="text-end ps-3">
+                    <span className="d-block small text-muted">Cupos disponibles</span>
+                    <span className={`badge fs-6 ${selectedProcedure.availableQuota > 0 ? 'bg-success' : 'bg-danger'}`}>
+                      {selectedProcedure.availableQuota}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="col-12">
               <label className="form-label fw-bold">Descripción del Requerimiento</label>
@@ -162,7 +219,7 @@ export function Requests() {
         </div>
       </div>
 
-      {/* Panel de Gestión para Funcionarios / Admins */}
+      {/* Panel de Gestión */}
       {canManage && updateData.requestId && (
         <div className="card shadow-sm border-success mb-4 bg-light">
           <div className="card-body">
@@ -210,7 +267,7 @@ export function Requests() {
         </div>
       )}
 
-      {/* Tabla con el historial de solicitudes */}
+      {/* Tabla con historial */}
       <div className="card shadow-sm border-0">
         <div className="card-body p-0">
           <div className="table-responsive">
@@ -228,14 +285,14 @@ export function Requests() {
                 </tr>
               </thead>
               <tbody>
-                {requests.length === 0 ? (
+                {currentRequests.length === 0 ? (
                   <tr>
                     <td colSpan={canManage ? "8" : "7"} className="text-center py-4 text-muted">
                       No existen solicitudes registradas.
                     </td>
                   </tr>
                 ) : (
-                  requests.map((req) => (
+                  currentRequests.map((req) => (
                     <tr key={req.id}>
                       <td className="fw-bold">{req.id}</td>
                       <td>{req.citizenId}</td>
@@ -275,6 +332,34 @@ export function Requests() {
             </table>
           </div>
         </div>
+
+        {/* Paginador */}
+        {sortedRequests.length > itemsPerPage && (
+          <div className="card-footer bg-white d-flex justify-content-between align-items-center py-3">
+            <span className="small text-muted">
+              Página {currentPage} de {totalPages} ({sortedRequests.length} registros en total)
+            </span>
+            <ul className="pagination pagination-sm mb-0">
+              <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => setCurrentPage((prev) => prev - 1)}>
+                  Anterior
+                </button>
+              </li>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <li key={page} className={`page-item ${currentPage === page ? 'active' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(page)}>
+                    {page}
+                  </button>
+                </li>
+              ))}
+              <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => setCurrentPage((prev) => prev + 1)}>
+                  Siguiente
+                </button>
+              </li>
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );
