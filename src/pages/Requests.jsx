@@ -2,6 +2,44 @@ import React, { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { requestsClient, catalogClient } from '../api/axiosClient';
 
+const cleanRut = (rut) => rut.replace(/[^0-9kK]/g, '');
+
+const formatRut = (rutRaw) => {
+  const cleaned = cleanRut(rutRaw).toUpperCase();
+  if (!cleaned) return '';
+  if (cleaned.length === 1) return cleaned;
+  
+  const body = cleaned.slice(0, -1);
+  const dv = cleaned.slice(-1);
+
+  let formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${formattedBody}-${dv}`;
+};
+
+const validateRut = (rutRaw) => {
+  const cleaned = cleanRut(rutRaw).toUpperCase();
+  if (cleaned.length < 8) return false;
+
+  const body = cleaned.slice(0, -1);
+  const dv = cleaned.slice(-1);
+
+  let sum = 0;
+  let multiplier = 2;
+
+  for (let i = body.length - 1; i >= 0; i--) {
+    sum += parseInt(body.charAt(i), 10) * multiplier;
+    multiplier = multiplier === 7 ? 2 : multiplier + 1;
+  }
+
+  const expectedDvNum = 11 - (sum % 11);
+  let expectedDv = '';
+  if (expectedDvNum === 11) expectedDv = '0';
+  else if (expectedDvNum === 10) expectedDv = 'K';
+  else expectedDv = expectedDvNum.toString();
+
+  return dv === expectedDv;
+};
+
 export function Requests() {
   const { instance } = useMsal();
   const activeAccount = instance.getActiveAccount();
@@ -12,18 +50,26 @@ export function Requests() {
   const [procedures, setProcedures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const [showDetail, setShowDetail] = useState(false);
-
-  // Paginación
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [successMsg, setSuccessMsg] = useState(null);
 
   const [newRequest, setNewRequest] = useState({
     procedureTypeId: '',
     citizenId: '',
     description: ''
   });
+
+  const [rutError, setRutError] = useState('');
+  const [showDetail, setShowDetail] = useState(false);
+
+  // Modal / Selector Paginado de Trámites
+  const [showModalProcedure, setShowModalProcedure] = useState(false);
+  const [procSearch, setProcSearch] = useState('');
+  const [procModalPage, setProcModalPage] = useState(1);
+  const procModalItemsPerPage = 5;
+
+  // Paginación Tabla Solicitudes
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const [updateData, setUpdateData] = useState({
     requestId: null,
@@ -55,20 +101,58 @@ export function Requests() {
     loadData();
   }, []);
 
+  const handleRutChange = (e) => {
+    const val = e.target.value;
+    const formatted = formatRut(val);
+    
+    setNewRequest({ ...newRequest, citizenId: formatted });
+
+    if (cleanRut(formatted).length > 1) {
+      if (!validateRut(formatted)) {
+        setRutError('El RUT ingresado no es válido. Ej: 12.345.678-9 o 30.093.931-K');
+      } else {
+        setRutError('');
+      }
+    } else {
+      setRutError('');
+    }
+  };
+
   const selectedProcedure = procedures.find(
     (p) => p.id.toString() === newRequest.procedureTypeId.toString()
   );
 
+  const isQuotaAvailable = selectedProcedure ? selectedProcedure.availableQuota > 0 : true;
+
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
+    setSuccessMsg(null);
+
+    if (!newRequest.procedureTypeId) {
+      alert('Debe seleccionar un trámite.');
+      return;
+    }
+
+    if (!validateRut(newRequest.citizenId)) {
+      setRutError('Debe ingresar un RUT chileno válido antes de continuar.');
+      return;
+    }
+
+    if (selectedProcedure && selectedProcedure.availableQuota <= 0) {
+      alert('No es posible ingresar la solicitud: El trámite seleccionado no tiene cupos disponibles.');
+      return;
+    }
+
     try {
       await requestsClient.post('/api/requests', {
         ...newRequest,
-        procedureTypeId: parseInt(newRequest.procedureTypeId)
+        procedureTypeId: parseInt(newRequest.procedureTypeId, 10)
       });
       setNewRequest({ procedureTypeId: '', citizenId: '', description: '' });
       setShowDetail(false);
-      setCurrentPage(1); // Regresa a la primera página para ver el elemento recién creado
+      setRutError('');
+      setCurrentPage(1);
+      setSuccessMsg('Solicitud ingresada con éxito.');
       loadData();
     } catch (err) {
       alert(err.response?.data?.message || 'Error al crear la solicitud');
@@ -84,11 +168,23 @@ export function Requests() {
         crew: updateData.crew
       });
       setUpdateData({ requestId: null, status: 'INGRESADO', crew: '' });
+      setSuccessMsg('Estado y cuadrilla actualizados correctamente.');
       loadData();
     } catch (err) {
       alert(err.response?.data?.message || 'Error al actualizar estado/cuadrilla');
     }
   };
+
+  const filteredProcedures = procedures.filter(p => 
+    p.name.toLowerCase().includes(procSearch.toLowerCase()) || 
+    p.code.toLowerCase().includes(procSearch.toLowerCase())
+  );
+
+  const totalProcModalPages = Math.ceil(filteredProcedures.length / procModalItemsPerPage) || 1;
+  const currentProcModalItems = filteredProcedures.slice(
+    (procModalPage - 1) * procModalItemsPerPage,
+    procModalPage * procModalItemsPerPage
+  );
 
   const getStatusBadge = (status) => {
     const statusMap = {
@@ -111,18 +207,16 @@ export function Requests() {
     );
   }
 
-  // --- ORDEN DESCENDENTE Y PAGINACIÓN ---
   const sortedRequests = [...requests].reverse();
   const totalPages = Math.ceil(sortedRequests.length / itemsPerPage) || 1;
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentRequests = sortedRequests.slice(indexOfFirstItem, indexOfLastItem);
+  const currentRequests = sortedRequests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="container py-4">
       <h2 className="fw-bold text-primary mb-4">Gestión de Solicitudes</h2>
 
       {error && <div className="alert alert-danger shadow-sm">{error}</div>}
+      {successMsg && <div className="alert alert-success shadow-sm alert-dismissible fade show" role="alert">{successMsg}</div>}
 
       {/* Formulario de Ingreso */}
       <div className="card shadow-sm border-0 mb-4">
@@ -131,50 +225,48 @@ export function Requests() {
         </div>
         <div className="card-body">
           <form onSubmit={handleCreateSubmit} className="row g-3">
+            
+            {/* Campo Tipo de Trámite como Botón Único con Lupa */}
             <div className="col-md-6">
-              <label className="form-label fw-bold">Tipo de Trámite</label>
-              <div className="input-group">
-                <select
-                  className="form-select"
-                  value={newRequest.procedureTypeId}
-                  onChange={(e) => {
-                    setNewRequest({ ...newRequest, procedureTypeId: e.target.value });
-                    setShowDetail(false);
-                  }}
-                  required
+              <label className="form-label fw-bold d-block">Tipo de Trámite</label>
+              <div className="d-flex gap-2">
+                <button
+                  type="button"
+                  className={`btn ${selectedProcedure ? 'btn-outline-primary fw-semibold' : 'btn-primary'} text-start flex-grow-1`}
+                  onClick={() => setShowModalProcedure(true)}
                 >
-                  <option value="">-- Seleccionar Trámite Disponible --</option>
-                  {procedures.map((proc) => (
-                    <option key={proc.id} value={proc.id}>
-                      [{proc.code}] {proc.name}
-                    </option>
-                  ))}
-                </select>
+                  🔍 {selectedProcedure ? `[${selectedProcedure.code}] ${selectedProcedure.name}` : 'Seleccionar trámite'}
+                </button>
 
                 {selectedProcedure && (
                   <button
                     type="button"
                     className={`btn ${showDetail ? 'btn-info text-white' : 'btn-outline-info'}`}
                     onClick={() => setShowDetail(!showDetail)}
-                    title="Ver detalle del trámite"
                   >
-                    <i className="bi bi-question-circle-fill me-1"></i>
                     {showDetail ? 'Ocultar' : 'Ver detalle'}
                   </button>
                 )}
               </div>
             </div>
 
+            {/* RUT */}
             <div className="col-md-6">
               <label className="form-label fw-bold">RUT / ID Ciudadano</label>
               <input
                 type="text"
-                className="form-control"
-                placeholder="Ej: 12345678-9"
+                className={`form-control ${rutError ? 'is-invalid' : ''}`}
+                placeholder="Ej: 30.093.931-1"
                 value={newRequest.citizenId}
-                onChange={(e) => setNewRequest({ ...newRequest, citizenId: e.target.value })}
+                onChange={handleRutChange}
+                maxLength="12"
                 required
               />
+              {rutError ? (
+                <div className="invalid-feedback d-block fw-semibold">{rutError}</div>
+              ) : (
+                <div className="form-text">Formato automático aplicado: XX.XXX.XXX-X</div>
+              )}
             </div>
 
             {showDetail && selectedProcedure && (
@@ -182,7 +274,6 @@ export function Requests() {
                 <div className="alert alert-info border-info mb-0 d-flex justify-content-between align-items-center shadow-sm">
                   <div>
                     <h6 className="fw-bold mb-1">
-                      <i className="bi bi-info-circle me-2"></i>
                       {selectedProcedure.name} ({selectedProcedure.code})
                     </h6>
                     <p className="mb-0 text-dark small">
@@ -199,6 +290,14 @@ export function Requests() {
               </div>
             )}
 
+            {!isQuotaAvailable && (
+              <div className="col-12">
+                <div className="alert alert-warning mb-0 text-dark border-warning">
+                  ⚠ <strong>Sin cupos disponibles:</strong> El trámite seleccionado ha agotado sus cupos diarios.
+                </div>
+              </div>
+            )}
+
             <div className="col-12">
               <label className="form-label fw-bold">Descripción del Requerimiento</label>
               <input
@@ -211,13 +310,91 @@ export function Requests() {
             </div>
 
             <div className="col-12 text-end mt-3">
-              <button type="submit" className="btn btn-success px-4">
+              <button 
+                type="submit" 
+                className="btn btn-success px-4" 
+                disabled={!isQuotaAvailable || !!rutError || !newRequest.procedureTypeId}
+              >
                 Enviar Solicitud
               </button>
             </div>
           </form>
         </div>
       </div>
+
+      {/* MODAL TRÁMITES SOLICITUDES */}
+      {showModalProcedure && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content shadow-lg border-0">
+              <div className="modal-header bg-primary text-white">
+                <h5 className="modal-title fw-bold">Seleccionar Tipo de Trámite</h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowModalProcedure(false)}></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Filtrar por código o nombre de trámite..."
+                    value={procSearch}
+                    onChange={(e) => {
+                      setProcSearch(e.target.value);
+                      setProcModalPage(1);
+                    }}
+                  />
+                </div>
+
+                <div className="list-group mb-3">
+                  {currentProcModalItems.length === 0 ? (
+                    <div className="text-center py-3 text-muted">No se encontraron trámites coincidentes.</div>
+                  ) : (
+                    currentProcModalItems.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center ${newRequest.procedureTypeId.toString() === p.id.toString() ? 'active' : ''}`}
+                        onClick={() => {
+                          setNewRequest({ ...newRequest, procedureTypeId: p.id.toString() });
+                          setShowModalProcedure(false);
+                        }}
+                      >
+                        <div>
+                          <span className="badge bg-secondary me-2">{p.code}</span>
+                          <strong>{p.name}</strong>
+                          <div className="small text-muted">{p.description || 'Sin descripción'}</div>
+                        </div>
+                        <span className={`badge ${p.availableQuota > 0 ? 'bg-success' : 'bg-danger'}`}>
+                          {p.availableQuota > 0 ? `${p.availableQuota} cupos` : 'Sin cupos'}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {filteredProcedures.length > procModalItemsPerPage && (
+                  <div className="d-flex justify-content-between align-items-center pt-2 border-top">
+                    <span className="small text-muted">
+                      Página {procModalPage} de {totalProcModalPages}
+                    </span>
+                    <ul className="pagination pagination-sm mb-0">
+                      <li className={`page-item ${procModalPage === 1 ? 'disabled' : ''}`}>
+                        <button type="button" className="page-link" onClick={() => setProcModalPage(prev => prev - 1)}>Anterior</button>
+                      </li>
+                      <li className={`page-item ${procModalPage === totalProcModalPages ? 'disabled' : ''}`}>
+                        <button type="button" className="page-link" onClick={() => setProcModalPage(prev => prev + 1)}>Siguiente</button>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModalProcedure(false)}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Panel de Gestión */}
       {canManage && updateData.requestId && (
@@ -267,7 +444,7 @@ export function Requests() {
         </div>
       )}
 
-      {/* Tabla con historial */}
+      {/* Tabla */}
       <div className="card shadow-sm border-0">
         <div className="card-body p-0">
           <div className="table-responsive">
@@ -295,7 +472,7 @@ export function Requests() {
                   currentRequests.map((req) => (
                     <tr key={req.id}>
                       <td className="fw-bold">{req.id}</td>
-                      <td>{req.citizenId}</td>
+                      <td><span className="fw-semibold">{req.citizenId}</span></td>
                       <td><span className="badge bg-light text-dark border">{req.procedureTypeId}</span></td>
                       <td>{req.description || 'N/A'}</td>
                       <td>{getStatusBadge(req.status)}</td>
@@ -333,7 +510,6 @@ export function Requests() {
           </div>
         </div>
 
-        {/* Paginador */}
         {sortedRequests.length > itemsPerPage && (
           <div className="card-footer bg-white d-flex justify-content-between align-items-center py-3">
             <span className="small text-muted">
@@ -341,21 +517,15 @@ export function Requests() {
             </span>
             <ul className="pagination pagination-sm mb-0">
               <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                <button className="page-link" onClick={() => setCurrentPage((prev) => prev - 1)}>
-                  Anterior
-                </button>
+                <button className="page-link" onClick={() => setCurrentPage((prev) => prev - 1)}>Anterior</button>
               </li>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <li key={page} className={`page-item ${currentPage === page ? 'active' : ''}`}>
-                  <button className="page-link" onClick={() => setCurrentPage(page)}>
-                    {page}
-                  </button>
+                  <button className="page-link" onClick={() => setCurrentPage(page)}>{page}</button>
                 </li>
               ))}
               <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                <button className="page-link" onClick={() => setCurrentPage((prev) => prev + 1)}>
-                  Siguiente
-                </button>
+                <button className="page-link" onClick={() => setCurrentPage((prev) => prev + 1)}>Siguiente</button>
               </li>
             </ul>
           </div>

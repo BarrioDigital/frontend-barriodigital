@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { catalogClient } from '../api/axiosClient';
 
-// OPCIÓN 1: Catálogo estandarizado de Categorías con sus Nombres Oficiales
 const PROCEDURE_CATALOG = [
   {
     code: 'TRM-01',
@@ -72,16 +71,23 @@ export function Catalog() {
   const [procedures, setProcedures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
 
-  // Paginación
+  // Modal selector para el Nombre del Trámite en Catálogo
+  const [showModalName, setShowModalName] = useState(false);
+  const [nameSearch, setNameSearch] = useState('');
+  const [modalNamePage, setModalNamePage] = useState(1);
+  const modalItemsPerPage = 5;
+
+  // Paginación Tabla Principal
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Estado del Formulario
+  // Formulario
   const [newProcedure, setNewProcedure] = useState({
     code: '',
     name: '',
-    customName: '', // Campo auxiliar por si selecciona 'CUSTOM'
+    customName: '',
     description: '',
     dailyQuota: ''
   });
@@ -107,7 +113,6 @@ export function Catalog() {
     fetchProcedures();
   }, []);
 
-  // Al cambiar de código, reseteamos la selección del nombre
   const handleCodeChange = (e) => {
     setNewProcedure({
       ...newProcedure,
@@ -119,8 +124,8 @@ export function Catalog() {
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
+    setSuccessMsg(null);
 
-    // Si eligió 'CUSTOM', usamos el texto libre; de lo contrario, el nombre predefinido del combo
     const finalName = newProcedure.name === 'CUSTOM' ? newProcedure.customName.trim() : newProcedure.name;
 
     if (!finalName) {
@@ -141,6 +146,7 @@ export function Catalog() {
 
       setNewProcedure({ code: '', name: '', customName: '', description: '', dailyQuota: '' });
       setCurrentPage(1);
+      setSuccessMsg('Trámite registrado e integrado al catálogo exitosamente.');
       fetchProcedures();
     } catch (err) {
       alert(err.response?.data?.message || 'Error al crear el trámite');
@@ -156,6 +162,7 @@ export function Catalog() {
       });
       setSelectedId(null);
       setAddedQuota('');
+      setSuccessMsg('Cupos añadidos correctamente.');
       fetchProcedures();
     } catch (err) {
       alert(err.response?.data?.message || 'Error al recargar cupo');
@@ -171,16 +178,32 @@ export function Catalog() {
     );
   }
 
-  // Filtrar nombres dinámicamente según el código seleccionado
+  // Lista de nombres dinámicos
   const selectedCategoryObj = PROCEDURE_CATALOG.find((cat) => cat.code === newProcedure.code);
-  const availableNames = selectedCategoryObj ? selectedCategoryObj.names : [];
+  let availableNames = selectedCategoryObj ? [...selectedCategoryObj.names] : [];
 
-  // --- ORDEN DESCENDENTE Y PAGINACIÓN ---
+  if (newProcedure.code) {
+    const existingCustomNames = procedures
+      .filter((p) => p.code === newProcedure.code && !availableNames.includes(p.name))
+      .map((p) => p.name);
+
+    availableNames = [...new Set([...availableNames, ...existingCustomNames])];
+  }
+
+  // Búsqueda y Paginación dentro del Modal de Catálogo
+  const filteredNames = availableNames.filter((n) =>
+    n.toLowerCase().includes(nameSearch.toLowerCase())
+  );
+
+  const totalModalPages = Math.ceil(filteredNames.length / modalItemsPerPage) || 1;
+  const currentModalNames = filteredNames.slice(
+    (modalNamePage - 1) * modalItemsPerPage,
+    modalNamePage * modalItemsPerPage
+  );
+
   const sortedProcedures = [...procedures].reverse();
   const totalPages = Math.ceil(sortedProcedures.length / itemsPerPage) || 1;
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentProcedures = sortedProcedures.slice(indexOfFirstItem, indexOfLastItem);
+  const currentProcedures = sortedProcedures.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="container py-4">
@@ -189,8 +212,9 @@ export function Catalog() {
       </div>
 
       {error && <div className="alert alert-danger shadow-sm">{error}</div>}
+      {successMsg && <div className="alert alert-success shadow-sm alert-dismissible fade show" role="alert">{successMsg}</div>}
 
-      {/* Formulario de creación con Desplegables Dependientes */}
+      {/* Formulario de creación */}
       {isAdmin && (
         <div className="card shadow-sm border-0 mb-4">
           <div className="card-header bg-primary text-white fw-semibold">
@@ -198,10 +222,8 @@ export function Catalog() {
           </div>
           <div className="card-body">
             <form onSubmit={handleCreateSubmit} className="row g-3">
-              
-              {/* SELECT 1: CÓDIGO */}
               <div className="col-md-6">
-                <label className="form-label fw-bold">1. Código de Trámite</label>
+                <label className="form-label fw-bold">1. Código de Categoría</label>
                 <select
                   className="form-select"
                   value={newProcedure.code}
@@ -217,31 +239,23 @@ export function Catalog() {
                 </select>
               </div>
 
-              {/* SELECT 2: NOMBRE OFICIAL DEPENDIENTE */}
+              {/* Campo Nombre del Trámite como Botón Único SIN Lupa */}
               <div className="col-md-6">
-                <label className="form-label fw-bold">2. Nombre del Trámite</label>
-                <select
-                  className="form-select"
-                  value={newProcedure.name}
-                  onChange={(e) => setNewProcedure({ ...newProcedure, name: e.target.value })}
+                <label className="form-label fw-bold d-block">2. Nombre del Trámite</label>
+                <button
+                  type="button"
+                  className={`btn ${newProcedure.name ? 'btn-outline-primary fw-semibold' : 'btn-primary'} w-100 text-start`}
                   disabled={!newProcedure.code}
-                  required
+                  onClick={() => setShowModalName(true)}
                 >
-                  <option value="">
-                    {!newProcedure.code ? '-- Primero seleccione un código --' : '-- Seleccione un nombre oficial --'}
-                  </option>
-                  {availableNames.map((name, index) => (
-                    <option key={index} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                  {newProcedure.code && (
-                    <option value="CUSTOM">➕ OTRO (Escribir manualmente...)</option>
-                  )}
-                </select>
+                  {!newProcedure.code
+                    ? '-- Primero seleccione un código --'
+                    : newProcedure.name === 'CUSTOM'
+                    ? '➕ OTRO (Escribir manualmente...)'
+                    : newProcedure.name || 'Seleccionar trámite'}
+                </button>
               </div>
 
-              {/* CAMPO TEXTO LIBRE SOLO SI SELECCIONA 'OTRO' */}
               {newProcedure.name === 'CUSTOM' && (
                 <div className="col-md-12">
                   <div className="p-3 bg-light rounded border">
@@ -249,7 +263,7 @@ export function Catalog() {
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="Ingrese el nombre exacto del nuevo trámite..."
+                      placeholder="Ingrese el nombre exacto del nuevo trámite personalizado..."
                       value={newProcedure.customName}
                       onChange={(e) => setNewProcedure({ ...newProcedure, customName: e.target.value })}
                       required
@@ -280,13 +294,10 @@ export function Catalog() {
                   onChange={(e) => setNewProcedure({ ...newProcedure, dailyQuota: e.target.value })}
                   required
                 />
-                <div className="form-text">
-                  El cupo disponible inicial se calculará e igualará al cupo diario.
-                </div>
               </div>
 
               <div className="col-12 text-end mt-3">
-                <button type="submit" className="btn btn-success px-4">
+                <button type="submit" className="btn btn-success px-4" disabled={!newProcedure.name}>
                   Registrar Trámite
                 </button>
               </div>
@@ -295,7 +306,86 @@ export function Catalog() {
         </div>
       )}
 
-      {/* Panel de recarga de cupos */}
+      {/* MODAL NOMBRE DEL TRÁMITE (CATÁLOGO) */}
+      {showModalName && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content shadow-lg border-0">
+              <div className="modal-header bg-primary text-white">
+                <h5 className="modal-title fw-bold">Seleccionar Nombre del Trámite</h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowModalName(false)}></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Buscar nombre de trámite..."
+                    value={nameSearch}
+                    onChange={(e) => {
+                      setNameSearch(e.target.value);
+                      setModalNamePage(1);
+                    }}
+                  />
+                </div>
+
+                <div className="list-group mb-3">
+                  {currentModalNames.length === 0 && !nameSearch ? (
+                    <div className="text-center py-3 text-muted">No hay nombres registrados para esta categoría.</div>
+                  ) : (
+                    currentModalNames.map((name, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`list-group-item list-group-item-action ${newProcedure.name === name ? 'active' : ''}`}
+                        onClick={() => {
+                          setNewProcedure({ ...newProcedure, name: name });
+                          setShowModalName(false);
+                        }}
+                      >
+                        {name}
+                      </button>
+                    ))
+                  )}
+
+                  {/* Opción para escribir personalizado */}
+                  <button
+                    type="button"
+                    className={`list-group-item list-group-item-action text-primary fw-bold ${newProcedure.name === 'CUSTOM' ? 'active text-white' : ''}`}
+                    onClick={() => {
+                      setNewProcedure({ ...newProcedure, name: 'CUSTOM' });
+                      setShowModalName(false);
+                    }}
+                  >
+                    ➕ OTRO (Escribir manualmente...)
+                  </button>
+                </div>
+
+                {filteredNames.length > modalItemsPerPage && (
+                  <div className="d-flex justify-content-between align-items-center pt-2 border-top">
+                    <span className="small text-muted">
+                      Página {modalNamePage} de {totalModalPages}
+                    </span>
+                    <ul className="pagination pagination-sm mb-0">
+                      <li className={`page-item ${modalNamePage === 1 ? 'disabled' : ''}`}>
+                        <button type="button" className="page-link" onClick={() => setModalNamePage(prev => prev - 1)}>Anterior</button>
+                      </li>
+                      <li className={`page-item ${modalNamePage === totalModalPages ? 'disabled' : ''}`}>
+                        <button type="button" className="page-link" onClick={() => setModalNamePage(prev => prev + 1)}>Siguiente</button>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModalName(false)}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recarga de Cupos */}
       {isAdmin && selectedId && (
         <div className="card shadow-sm border-info mb-4 bg-light">
           <div className="card-body">
@@ -325,7 +415,7 @@ export function Catalog() {
         </div>
       )}
 
-      {/* Tabla de Trámites */}
+      {/* Tabla */}
       <div className="card shadow-sm border-0">
         <div className="card-body p-0">
           <div className="table-responsive">
@@ -379,7 +469,6 @@ export function Catalog() {
           </div>
         </div>
 
-        {/* Paginador */}
         {sortedProcedures.length > itemsPerPage && (
           <div className="card-footer bg-white d-flex justify-content-between align-items-center py-3">
             <span className="small text-muted">
@@ -387,21 +476,15 @@ export function Catalog() {
             </span>
             <ul className="pagination pagination-sm mb-0">
               <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                <button className="page-link" onClick={() => setCurrentPage((prev) => prev - 1)}>
-                  Anterior
-                </button>
+                <button className="page-link" onClick={() => setCurrentPage((prev) => prev - 1)}>Anterior</button>
               </li>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <li key={page} className={`page-item ${currentPage === page ? 'active' : ''}`}>
-                  <button className="page-link" onClick={() => setCurrentPage(page)}>
-                    {page}
-                  </button>
+                  <button className="page-link" onClick={() => setCurrentPage(page)}>{page}</button>
                 </li>
               ))}
               <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                <button className="page-link" onClick={() => setCurrentPage((prev) => prev + 1)}>
-                  Siguiente
-                </button>
+                <button className="page-link" onClick={() => setCurrentPage((prev) => prev + 1)}>Siguiente</button>
               </li>
             </ul>
           </div>
