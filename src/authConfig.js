@@ -4,7 +4,7 @@ export const msalConfig = {
   auth: {
     clientId: "95f77a04-372f-4892-ac61-3645256190af",
     authority: "https://login.microsoftonline.com/b04474a0-e2bf-4a7c-a76b-40b718ef0f12",
-    redirectUri: "http://localhost:5173",
+    redirectUri: typeof window !== "undefined" ? window.location.origin : "http://localhost:5173",
   },
   cache: {
     cacheLocation: "sessionStorage",

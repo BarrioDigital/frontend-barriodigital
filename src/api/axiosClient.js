@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-// Base URL dinámica (Proxy de Vite o API Gateway)
+// Obtención dinámica del protocolo (http: / https:) y host (localhost / IP pública / DuckDNS)
+const currentProtocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
+const currentHostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+
+// Base URL dinámica configurable por VITE_API_BASE_URL o por defecto
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 // Instancia base genérica
@@ -11,9 +15,9 @@ export const axiosClient = axios.create({
   },
 });
 
-// Instancia para Microservicio de Auditoría
+// Instancia para Microservicio de Auditoría (Puerto 8080)
 export const auditClient = axios.create({
-  baseURL: API_BASE_URL || 'http://localhost:8080',
+  baseURL: API_BASE_URL || `${currentProtocol}//${currentHostname}:8080`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -21,7 +25,7 @@ export const auditClient = axios.create({
 
 // Instancia para Microservicio de Catalog (Puerto 8081)
 export const catalogClient = axios.create({
-  baseURL: API_BASE_URL || 'http://localhost:8081',
+  baseURL: API_BASE_URL || `${currentProtocol}//${currentHostname}:8081`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -29,7 +33,7 @@ export const catalogClient = axios.create({
 
 // Instancia para Microservicio de Requests (Puerto 8082)
 export const requestsClient = axios.create({
-  baseURL: API_BASE_URL || 'http://localhost:8082',
+  baseURL: API_BASE_URL || `${currentProtocol}//${currentHostname}:8082`,
   headers: {
     'Content-Type': 'application/json',
   },
