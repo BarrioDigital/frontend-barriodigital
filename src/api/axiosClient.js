@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-// IP Pública de tu servidor AWS EC2
+// IP Pública de servidor AWS EC2
 const EC2_PUBLIC_IP = 'http://54.88.166.217';
 
 // Base URL dinámica (Proxy de Vite, Variable de Entorno o IP Pública de EC2)
