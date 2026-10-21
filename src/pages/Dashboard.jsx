@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { axiosClient } from '../api/axiosClient';
+import { reportClient } from '../api/axiosClient';
 
 export const Dashboard = () => {
   const [kpis, setKpis] = useState(null);
@@ -9,7 +9,7 @@ export const Dashboard = () => {
   useEffect(() => {
     const cargarKpis = async () => {
       try {
-        const response = await axiosClient.get('/api/report/kpis?range=last24h');
+        const response = await reportClient.get('/api/report/kpis?range=last24h');
         setKpis(response.data);
       } catch (error) {
         console.error(error);

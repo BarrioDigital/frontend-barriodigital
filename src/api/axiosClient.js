@@ -11,9 +11,9 @@ export const axiosClient = axios.create({
   },
 });
 
-// Instancia para Microservicio de Auditoría
+// Instancia para Microservicio de Auditoría (Puerto 8084)
 export const auditClient = axios.create({
-  baseURL: API_BASE_URL || 'http://localhost:8080',
+  baseURL: API_BASE_URL || 'http://localhost:8084',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -30,6 +30,14 @@ export const catalogClient = axios.create({
 // Instancia para Microservicio de Requests (Puerto 8082)
 export const requestsClient = axios.create({
   baseURL: API_BASE_URL || 'http://localhost:8082',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Instancia para Microservicio de Reportes / KPIs (Puerto 8085)
+export const reportClient = axios.create({
+  baseURL: API_BASE_URL || 'http://localhost:8085',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -65,4 +73,5 @@ export const setupAxiosInterceptors = (msalInstance) => {
   auditClient.interceptors.request.use(attachTokenInterceptor, (error) => Promise.reject(error));
   catalogClient.interceptors.request.use(attachTokenInterceptor, (error) => Promise.reject(error));
   requestsClient.interceptors.request.use(attachTokenInterceptor, (error) => Promise.reject(error));
+  reportClient.interceptors.request.use(attachTokenInterceptor, (error) => Promise.reject(error));
 };

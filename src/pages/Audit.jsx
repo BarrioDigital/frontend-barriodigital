@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { axiosClient } from '../api/axiosClient';
+import { auditClient } from '../api/axiosClient';
 
 export const Audit = () => {
   const [events, setEvents] = useState([]);
@@ -17,7 +17,7 @@ export const Audit = () => {
     try {
       setLoading(true);
       setError('');
-      const response = await axiosClient.get('/api/audit');
+      const response = await auditClient.get('/api/audit');
       setEvents(normalizarData(response.data));
     } catch (err) {
       console.error("Error cargando auditoría:", err);
@@ -36,7 +36,7 @@ export const Audit = () => {
     try {
       setLoading(true);
       setError('');
-      const response = await axiosClient.get(`/api/audit/request/${requestId}`);
+      const response = await auditClient.get(`/api/audit/request/${requestId}`);
       setEvents(normalizarData(response.data));
     } catch (err) {
       console.error("Error buscando solicitud:", err);
