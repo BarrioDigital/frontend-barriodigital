@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-// Base URL dinámica (Proxy de Vite o API Gateway)
+// IP Pública de tu servidor AWS EC2
+const EC2_PUBLIC_IP = 'http://54.88.166.217';
+
+// Base URL dinámica (Proxy de Vite, Variable de Entorno o IP Pública de EC2)
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 // Instancia base genérica
@@ -13,7 +16,7 @@ export const axiosClient = axios.create({
 
 // Instancia para Microservicio de Auditoría (Puerto 8084)
 export const auditClient = axios.create({
-  baseURL: API_BASE_URL || 'http://localhost:8084',
+  baseURL: API_BASE_URL || `${EC2_PUBLIC_IP}:8084`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -21,7 +24,7 @@ export const auditClient = axios.create({
 
 // Instancia para Microservicio de Catalog (Puerto 8081)
 export const catalogClient = axios.create({
-  baseURL: API_BASE_URL || 'http://localhost:8081',
+  baseURL: API_BASE_URL || `${EC2_PUBLIC_IP}:8081`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -29,7 +32,7 @@ export const catalogClient = axios.create({
 
 // Instancia para Microservicio de Requests (Puerto 8082)
 export const requestsClient = axios.create({
-  baseURL: API_BASE_URL || 'http://localhost:8082',
+  baseURL: API_BASE_URL || `${EC2_PUBLIC_IP}:8082`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -37,7 +40,7 @@ export const requestsClient = axios.create({
 
 // Instancia para Microservicio de Reportes / KPIs (Puerto 8085)
 export const reportClient = axios.create({
-  baseURL: API_BASE_URL || 'http://localhost:8085',
+  baseURL: API_BASE_URL || `${EC2_PUBLIC_IP}:8085`,
   headers: {
     'Content-Type': 'application/json',
   },
