@@ -87,11 +87,13 @@ export function Requests() {
         catalogClient.get('/api/catalog/procedures')
       ]);
 
-      setRequests(requestsRes.data);
-      setProcedures(catalogRes.data);
+      setRequests(Array.isArray(requestsRes.data) ? requestsRes.data : []);
+      setProcedures(Array.isArray(catalogRes.data) ? catalogRes.data : []);
     } catch (err) {
       console.error('Error al cargar datos:', err);
       setError('No se pudo conectar con los servicios correspondientes.');
+      setRequests([]);
+      setProcedures([]);
     } finally {
       setLoading(false);
     }
@@ -118,9 +120,11 @@ export function Requests() {
     }
   };
 
-  const selectedProcedure = procedures.find(
-    (p) => p.id.toString() === newRequest.procedureTypeId.toString()
-  );
+  const selectedProcedure = Array.isArray(procedures)
+    ? procedures.find(
+        (p) => p && p.id && newRequest.procedureTypeId && p.id.toString() === newRequest.procedureTypeId.toString()
+      )
+    : null;
 
   const isQuotaAvailable = selectedProcedure ? selectedProcedure.availableQuota > 0 : true;
 
@@ -175,10 +179,12 @@ export function Requests() {
     }
   };
 
-  const filteredProcedures = procedures.filter(p => 
-    p.name.toLowerCase().includes(procSearch.toLowerCase()) || 
-    p.code.toLowerCase().includes(procSearch.toLowerCase())
-  );
+  const filteredProcedures = Array.isArray(procedures)
+    ? procedures.filter((p) => 
+        (p.name && p.name.toLowerCase().includes(procSearch.toLowerCase())) || 
+        (p.code && p.code.toLowerCase().includes(procSearch.toLowerCase()))
+      )
+    : [];
 
   const totalProcModalPages = Math.ceil(filteredProcedures.length / procModalItemsPerPage) || 1;
   const currentProcModalItems = filteredProcedures.slice(
@@ -207,7 +213,7 @@ export function Requests() {
     );
   }
 
-  const sortedRequests = [...requests].reverse();
+  const sortedRequests = Array.isArray(requests) ? [...requests].reverse() : [];
   const totalPages = Math.ceil(sortedRequests.length / itemsPerPage) || 1;
   const currentRequests = sortedRequests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
