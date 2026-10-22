@@ -1,46 +1,43 @@
 import axios from 'axios';
 
-// IP Pública de servidor AWS EC2 con protocolo HTTP incluido
-const EC2_PUBLIC_IP = 'http://54.196.124.236';
-
-// Base URL dinámica (Proxy de Vite, Variable de Entorno o IP Pública de EC2)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+// URL de invocación de tu AWS HTTP API Gateway
+const API_GATEWAY_URL = import.meta.env.VITE_API_BASE_URL || 'https://jrob2doi1b.execute-api.us-east-1.amazonaws.com';
 
 // Instancia base genérica
 export const axiosClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_GATEWAY_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Instancia para Microservicio de Auditoría (Puerto 8084)
+// Instancia para Microservicio de Auditoría
 export const auditClient = axios.create({
-  baseURL: API_BASE_URL || `${EC2_PUBLIC_IP}:8084`,
+  baseURL: API_GATEWAY_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Instancia para Microservicio de Catalog (Puerto 8081)
+// Instancia para Microservicio de Catálogo
 export const catalogClient = axios.create({
-  baseURL: API_BASE_URL || `${EC2_PUBLIC_IP}:8081`,
+  baseURL: API_GATEWAY_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Instancia para Microservicio de Requests (Puerto 8082)
+// Instancia para Microservicio de Solicitudes (Requests)
 export const requestsClient = axios.create({
-  baseURL: API_BASE_URL || `${EC2_PUBLIC_IP}:8082`,
+  baseURL: API_GATEWAY_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Instancia para Microservicio de Reportes / KPIs (Puerto 8085)
+// Instancia para Microservicio de Reportes / KPIs
 export const reportClient = axios.create({
-  baseURL: API_BASE_URL || `${EC2_PUBLIC_IP}:8085`,
+  baseURL: API_GATEWAY_URL,
   headers: {
     'Content-Type': 'application/json',
   },
