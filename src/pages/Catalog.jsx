@@ -99,11 +99,13 @@ export function Catalog() {
     try {
       setLoading(true);
       const response = await catalogClient.get('/api/catalog/procedures');
-      setProcedures(response.data);
+      // Garantizar que siempre se guarde un Array plano
+      setProcedures(Array.isArray(response.data) ? response.data : []);
       setError(null);
     } catch (err) {
       console.error('Error cargando catálogo:', err);
       setError('No se pudo conectar con el servicio de catálogo.');
+      setProcedures([]);
     } finally {
       setLoading(false);
     }
@@ -178,13 +180,14 @@ export function Catalog() {
     );
   }
 
-  // Lista de nombres dinámicos
+  // Lista de nombres dinámicos con validación defensiva de Array
+  const safeProcedures = Array.isArray(procedures) ? procedures : [];
   const selectedCategoryObj = PROCEDURE_CATALOG.find((cat) => cat.code === newProcedure.code);
   let availableNames = selectedCategoryObj ? [...selectedCategoryObj.names] : [];
 
   if (newProcedure.code) {
-    const existingCustomNames = procedures
-      .filter((p) => p.code === newProcedure.code && !availableNames.includes(p.name))
+    const existingCustomNames = safeProcedures
+      .filter((p) => p && p.code === newProcedure.code && p.name && !availableNames.includes(p.name))
       .map((p) => p.name);
 
     availableNames = [...new Set([...availableNames, ...existingCustomNames])];
@@ -201,7 +204,7 @@ export function Catalog() {
     modalNamePage * modalItemsPerPage
   );
 
-  const sortedProcedures = [...procedures].reverse();
+  const sortedProcedures = [...safeProcedures].reverse();
   const totalPages = Math.ceil(sortedProcedures.length / itemsPerPage) || 1;
   const currentProcedures = sortedProcedures.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -239,7 +242,7 @@ export function Catalog() {
                 </select>
               </div>
 
-              {/* Campo Nombre del Trámite como Botón Único SIN Lupa */}
+              {/* Campo Nombre del Trámite */}
               <div className="col-md-6">
                 <label className="form-label fw-bold d-block">2. Nombre del Trámite</label>
                 <button
@@ -335,7 +338,7 @@ export function Catalog() {
                   ) : (
                     currentModalNames.map((name, idx) => (
                       <button
-                        key={idx}
+                        key={`${name}-${idx}`}
                         type="button"
                         className={`list-group-item list-group-item-action ${newProcedure.name === name ? 'active' : ''}`}
                         onClick={() => {
@@ -348,7 +351,6 @@ export function Catalog() {
                     ))
                   )}
 
-                  {/* Opción para escribir personalizado */}
                   <button
                     type="button"
                     className={`list-group-item list-group-item-action text-primary fw-bold ${newProcedure.name === 'CUSTOM' ? 'active text-white' : ''}`}
@@ -439,8 +441,8 @@ export function Catalog() {
                     </td>
                   </tr>
                 ) : (
-                  currentProcedures.map((proc) => (
-                    <tr key={proc.id}>
+                  currentProcedures.map((proc, index) => (
+                    <tr key={proc.id || `proc-${index}`}>
                       <td className="fw-bold">{proc.id}</td>
                       <td><span className="badge bg-secondary">{proc.code}</span></td>
                       <td className="fw-semibold">{proc.name}</td>
