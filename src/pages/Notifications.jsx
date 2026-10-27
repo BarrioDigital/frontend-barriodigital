@@ -35,61 +35,58 @@ export function Notifications() {
       setLoading(true);
       setError('');
       
-      // Obtener el historial completo persistido en la BD
       const res = await requestsClient.get(`/api/requests/notifications?citizenId=${encodeURIComponent(citizenId.trim())}`);
       const rawData = Array.isArray(res.data) ? res.data : [];
 
       // =========================================================================
-      // AGRUPACIÓN POR requestId EN MEMORIA CLIENTE
+      // AGRUPACIÓN INTELIGENTE POR REQUEST_ID O VENTANA TEMPORAL
       // =========================================================================
-      const groupedMap = rawData.reduce((acc, current) => {
-        const reqId = current.requestId;
+      const groupedList = [];
 
-        // Si por alguna razón un registro no posee requestId, se muestra independiente
-        if (!reqId) {
-          acc[`single_${current.id}`] = { ...current };
-          return acc;
-        }
+      // Ordenar cronológicamente ascendente para agrupar eventos cercanos
+      const sortedAsc = [...rawData].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-        if (!acc[reqId]) {
-          // Si es la primera vez que encontramos esta solicitud, la registramos en el mapa
-          acc[reqId] = { ...current };
-        } else {
-          // Si ya existía una entrada para este requestId, aplicamos la unificación:
-          const existing = acc[reqId];
+      sortedAsc.forEach((item) => {
+        // Intentar obtener requestId real si viene en la propiedad
+        let realReqId = item.requestId;
 
-          // 1. Si cualquiera de las notificaciones viene como 'RESUELTO', forzamos el estado a RESUELTO
-          const isResolved = current.status === 'RESUELTO' || existing.status === 'RESUELTO';
-          const finalStatus = isResolved ? 'RESUELTO' : current.status;
+        // Si requestId no existe, buscar coincidencia temporal con alguna notificación ya agrupada
+        const itemTime = new Date(item.createdAt).getTime();
 
-          // 2. Definimos el mensaje unificado si la solicitud está resuelta
-          let finalMessage = existing.message;
-          if (isResolved) {
-            finalMessage = 'Tu solicitud ha sido RESUELTA.';
-          } else if (new Date(current.createdAt) > new Date(existing.createdAt)) {
-            finalMessage = current.message;
+        const matchIndex = groupedList.findIndex((group) => {
+          // Si ambos tienen requestId real
+          if (realReqId && group.requestId && realReqId === group.requestId) {
+            return true;
           }
+          // Si son eventos del mismo estado 'RESUELTO' emitidos con menos de 5 segundos de diferencia
+          const groupTime = new Date(group.createdAt).getTime();
+          const timeDiff = Math.abs(itemTime - groupTime);
+          const bothResolved = item.status === 'RESUELTO' && group.status === 'RESUELTO';
 
-          // 3. Conservamos la fecha más reciente
-          const latestDate = new Date(current.createdAt) > new Date(existing.createdAt) 
-            ? current.createdAt 
-            : existing.createdAt;
+          return bothResolved && timeDiff < 5000; // Ventana de 5 segundos
+        });
 
-          acc[reqId] = {
-            ...existing,
-            status: finalStatus,
-            message: finalMessage,
-            createdAt: latestDate
-          };
+        if (matchIndex === -1) {
+          // Si no hace match con ninguna existente, crear un nuevo grupo
+          groupedList.push({
+            ...item,
+            displayReqId: realReqId || item.id,
+            status: item.status,
+            message: item.status === 'RESUELTO' ? 'Tu solicitud ha sido RESUELTA.' : item.message
+          });
+        } else {
+          // Si hace match, unificar el grupo existente
+          const group = groupedList[matchIndex];
+          group.status = (item.status === 'RESUELTO' || group.status === 'RESUELTO') ? 'RESUELTO' : item.status;
+          group.message = 'Tu solicitud ha sido RESUELTA.';
+          if (new Date(item.createdAt) > new Date(group.createdAt)) {
+            group.createdAt = item.createdAt;
+          }
         }
+      });
 
-        return acc;
-      }, {});
-
-      // Convertir el objeto agrupado a un Array y ordenarlo por fecha descendente
-      const groupedList = Object.values(groupedMap).sort(
-        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-      );
+      // Ordenar la lista final de forma descendente para mostrar las más recientes arriba
+      groupedList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
       setNotifications(groupedList);
       setSearched(true);
@@ -163,10 +160,10 @@ export function Notifications() {
               </div>
             ) : (
               notifications.map((n) => (
-                <div key={n.requestId || n.id} className="list-group-item p-3 d-flex justify-content-between align-items-center">
+                <div key={n.id} className="list-group-item p-3 d-flex justify-content-between align-items-center">
                   <div>
                     <div className="d-flex align-items-center gap-2 mb-1">
-                      <span className="badge bg-primary">Solicitud #{n.requestId}</span>
+                      <span className="badge bg-primary">Solicitud #{n.displayReqId}</span>
                       <span className={`badge ${n.status === 'RESUELTO' ? 'bg-success' : 'bg-info text-dark'}`}>
                         {n.status}
                       </span>
@@ -180,7 +177,7 @@ export function Notifications() {
                   {n.status === 'RESUELTO' && (
                     <button
                       className="btn btn-success btn-sm ms-3 text-nowrap fw-semibold"
-                      onClick={() => handleDownloadCertificate(n.requestId, n.citizenId)}
+                      onClick={() => handleDownloadCertificate(n.displayReqId, n.citizenId)}
                     >
                       📄 Descargar Certificado
                     </button>
