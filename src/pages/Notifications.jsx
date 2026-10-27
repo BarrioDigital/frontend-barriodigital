@@ -34,9 +34,64 @@ export function Notifications() {
     try {
       setLoading(true);
       setError('');
-      // Consulta mediante Query Parameter compatible con la ruta GET /api/requests del Gateway
+      
+      // Obtener el historial completo persistido en la BD
       const res = await requestsClient.get(`/api/requests/notifications?citizenId=${encodeURIComponent(citizenId.trim())}`);
-      setNotifications(Array.isArray(res.data) ? res.data : []);
+      const rawData = Array.isArray(res.data) ? res.data : [];
+
+      // =========================================================================
+      // AGRUPACIÓN POR requestId EN MEMORIA CLIENTE
+      // =========================================================================
+      const groupedMap = rawData.reduce((acc, current) => {
+        const reqId = current.requestId;
+
+        // Si por alguna razón un registro no posee requestId, se muestra independiente
+        if (!reqId) {
+          acc[`single_${current.id}`] = { ...current };
+          return acc;
+        }
+
+        if (!acc[reqId]) {
+          // Si es la primera vez que encontramos esta solicitud, la registramos en el mapa
+          acc[reqId] = { ...current };
+        } else {
+          // Si ya existía una entrada para este requestId, aplicamos la unificación:
+          const existing = acc[reqId];
+
+          // 1. Si cualquiera de las notificaciones viene como 'RESUELTO', forzamos el estado a RESUELTO
+          const isResolved = current.status === 'RESUELTO' || existing.status === 'RESUELTO';
+          const finalStatus = isResolved ? 'RESUELTO' : current.status;
+
+          // 2. Definimos el mensaje unificado si la solicitud está resuelta
+          let finalMessage = existing.message;
+          if (isResolved) {
+            finalMessage = 'Tu solicitud ha sido RESUELTA.';
+          } else if (new Date(current.createdAt) > new Date(existing.createdAt)) {
+            finalMessage = current.message;
+          }
+
+          // 3. Conservamos la fecha más reciente
+          const latestDate = new Date(current.createdAt) > new Date(existing.createdAt) 
+            ? current.createdAt 
+            : existing.createdAt;
+
+          acc[reqId] = {
+            ...existing,
+            status: finalStatus,
+            message: finalMessage,
+            createdAt: latestDate
+          };
+        }
+
+        return acc;
+      }, {});
+
+      // Convertir el objeto agrupado a un Array y ordenarlo por fecha descendente
+      const groupedList = Object.values(groupedMap).sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+
+      setNotifications(groupedList);
       setSearched(true);
     } catch (err) {
       console.error('Error al consultar notificaciones:', err);
@@ -108,7 +163,7 @@ export function Notifications() {
               </div>
             ) : (
               notifications.map((n) => (
-                <div key={n.id} className="list-group-item p-3 d-flex justify-content-between align-items-center">
+                <div key={n.requestId || n.id} className="list-group-item p-3 d-flex justify-content-between align-items-center">
                   <div>
                     <div className="d-flex align-items-center gap-2 mb-1">
                       <span className="badge bg-primary">Solicitud #{n.requestId}</span>
