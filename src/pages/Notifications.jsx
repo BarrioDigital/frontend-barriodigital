@@ -34,7 +34,8 @@ export function Notifications() {
     try {
       setLoading(true);
       setError('');
-      const res = await requestsClient.get(`/api/requests/notifications/${citizenId.trim()}`);
+      // Consulta mediante Query Parameter compatible con la ruta GET /api/requests del Gateway
+      const res = await requestsClient.get(`/api/requests/notifications?citizenId=${encodeURIComponent(citizenId.trim())}`);
       setNotifications(Array.isArray(res.data) ? res.data : []);
       setSearched(true);
     } catch (err) {
