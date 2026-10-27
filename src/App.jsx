@@ -5,6 +5,7 @@ import { setupAxiosInterceptors } from './api/axiosClient';
 import { Login } from './pages/Login';
 import { Catalog } from './pages/Catalog';
 import { Requests } from './pages/Requests';
+import { Notifications } from './pages/Notifications';
 import { Audit } from './pages/Audit';
 import { Dashboard } from './pages/Dashboard';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -47,6 +48,7 @@ export default function App() {
   const canAccessDashboard = true; // Todos los autenticados
   const canAccessCatalog = userRoles.includes('Admin') || userRoles.includes('Funcionario');
   const canAccessRequests = userRoles.includes('Admin') || userRoles.includes('Funcionario') || userRoles.includes('Vecino');
+  const canAccessNotifications = userRoles.includes('Admin') || userRoles.includes('Funcionario') || userRoles.includes('Vecino');
   const canAccessAudit = userRoles.includes('Admin') || userRoles.includes('Auditor');
 
   const getHomeRoute = () => {
@@ -54,6 +56,7 @@ export default function App() {
     if (canAccessDashboard) return "/dashboard";
     if (canAccessCatalog) return "/catalog";
     if (canAccessRequests) return "/requests";
+    if (canAccessNotifications) return "/notifications";
     if (canAccessAudit) return "/audit";
     return "/login";
   };
@@ -75,6 +78,12 @@ export default function App() {
           {canAccessRequests && (
             <Link to="/requests" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
               Solicitudes
+            </Link>
+          )}
+
+          {canAccessNotifications && (
+            <Link to="/notifications" style={{ fontWeight: 'bold', textDecoration: 'none', color: '#0078d4' }}>
+              Notificaciones
             </Link>
           )}
 
@@ -132,6 +141,19 @@ export default function App() {
               isAuthenticated ? (
                 <ProtectedRoute allowedRoles={['Admin', 'Funcionario', 'Vecino']}>
                   <Requests />
+                </ProtectedRoute>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/notifications"
+            element={
+              isAuthenticated ? (
+                <ProtectedRoute allowedRoles={['Admin', 'Funcionario', 'Vecino']}>
+                  <Notifications />
                 </ProtectedRoute>
               ) : (
                 <Navigate to="/login" replace />
